@@ -7,6 +7,20 @@ namespace UEcastocLib
 {
     public static class UCasDataParser
     {
+        public class FileUnpackedEventArguments
+        {
+            public string CurrentFilePath;
+            public int CurrentFileNumber;
+            public int TotalFilesNumber;
+        }
+
+        public delegate void FileUnpackedDelegate(FileUnpackedEventArguments fileUnpackedEventArguments);
+        public delegate void FinishedUnpackingDelegate();
+
+
+        public static FileUnpackedDelegate FileUnpacked;
+        public static FinishedUnpackingDelegate FinishedUnpacking;
+
         private static void UnpackFile(UTocData utoc, GameFileMetaData fdata, List<byte[]> blockData, string outDir)
         {
             Directory.CreateDirectory(outDir);
@@ -87,11 +101,11 @@ namespace UEcastocLib
             {
                 List<GameFileMetaData> filesToUnpack = MatchFilter(utoc, filter);
 
-                foreach (var v in filesToUnpack)
+                foreach (var currentFileToUnpack in filesToUnpack)
                 {
                     List<byte[]> compressionBlockData = new List<byte[]>();
 
-                    foreach (var b in v.CompressionBlocks)
+                    foreach (var b in currentFileToUnpack.CompressionBlocks)
                     {
                         openUcas.Seek((long)b.GetOffset(), SeekOrigin.Begin);
                         byte[] buf = new byte[utoc.IsEncrypted() ? Helpers.Align(b.GetCompressedSize(), 16) : b.GetCompressedSize()];
@@ -113,7 +127,7 @@ namespace UEcastocLib
                         compressionBlockData.Add(buf);
                     }
 
-                    UnpackFile(utoc, v, compressionBlockData, outDir);
+                    UnpackFile(utoc, currentFileToUnpack, compressionBlockData, outDir);
                     filesUnpacked++;
                 }
             }
