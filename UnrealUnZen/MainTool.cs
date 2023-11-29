@@ -6,6 +6,8 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using UEcastocLib;
 
@@ -76,16 +78,26 @@ namespace UnrealUnZen
             UnpackFolderBrowserDialog.InitialDirectory = UTocFileAddress;
             if (UnpackFolderBrowserDialog.ShowDialog() == CommonFileDialogResult.Ok)
             {
-                var OutFolderName = Path.GetFileNameWithoutExtension(UTocFileAddress) + "_Export";
-                var UnpackDirectoryPath = Path.Combine(UnpackFolderBrowserDialog.FileName, OutFolderName);
-                Directory.CreateDirectory(UnpackDirectoryPath);
+                Task.Factory.StartNew(UnpackFilesTask);
 
-                int exportcount = UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
-                    UnpackDirectoryPath, RegexUnpack.Text);
-                MessageBox.Show(exportcount + " file(s) extracted!");
+                WorkInProgressForm workInProgressForm = new WorkInProgressForm();
+
+                UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
+                UCasDataParser.FinishedUnpacking += workInProgressForm.OnUnpackingFinished;
+
+                workInProgressForm.ShowDialog();
             }
         }
 
+        private void UnpackFilesTask()
+        {
+            var OutFolderName = Path.GetFileNameWithoutExtension(UTocFileAddress) + "_Export";
+            var UnpackDirectoryPath = Path.Combine(UnpackFolderBrowserDialog.FileName, OutFolderName);
+            Directory.CreateDirectory(UnpackDirectoryPath);
+
+            int exportcount = UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
+                UnpackDirectoryPath, RegexUnpack.Text);
+        }
 
         private void RepackBTN_Click(object sender, EventArgs e)
         {
