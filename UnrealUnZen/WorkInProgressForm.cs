@@ -20,7 +20,7 @@ namespace UnrealUnZen
             InitializeComponent();
         }
 
-        public void OnFileUnpacked(UCasDataParser.FileUnpackedEventArguments fileUnpackedEventArguments)
+        public void OnFileUnpacked(FileUnpackedEventArguments fileUnpackedEventArguments)
         {
             Invoke((MethodInvoker)delegate
             {
@@ -44,15 +44,32 @@ namespace UnrealUnZen
             Invoke((MethodInvoker)Close);
         }
 
-        public void OnFilePacked(FilePackedEventArguments filePackedEventArguments)
+        public void OnManifestFileProcessed(FileProcessedEventArguments fileProcessedEventArguments)
         {
             Invoke((MethodInvoker)delegate
             {
                 ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
-                var currentFileNumber = filePackedEventArguments.CurrentFileNumber;
-                var totalFilesNumber = filePackedEventArguments.TotalFilesNumber;
-                var filesUnpackedSize = filePackedEventArguments.FilesUnpackedSize;
-                var allFilesSize = filePackedEventArguments.AllFilesSize;
+                var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
+                var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
+                var filesUnpackedSize = fileProcessedEventArguments.FilesUnpackedSize;
+                var allFilesSize = fileProcessedEventArguments.AllFilesSize;
+                double filesUnpackedSizeGB = (double)filesUnpackedSize / Gigabyte;
+                double allFilesSizeGB = (double)allFilesSize / Gigabyte;
+
+                ProgressLabel.Text =
+                    $"Processed {currentFileNumber} out of {totalFilesNumber} manifest files";
+            });
+        }
+
+        public void OnFilePacked(FileProcessedEventArguments fileProcessedEventArguments)
+        {
+            Invoke((MethodInvoker)delegate
+            {
+                ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
+                var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
+                var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
+                var filesUnpackedSize = fileProcessedEventArguments.FilesUnpackedSize;
+                var allFilesSize = fileProcessedEventArguments.AllFilesSize;
                 double filesUnpackedSizeGB = (double)filesUnpackedSize / Gigabyte;
                 double allFilesSizeGB = (double)allFilesSize / Gigabyte;
 

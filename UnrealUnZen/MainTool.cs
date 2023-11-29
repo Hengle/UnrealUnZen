@@ -1,4 +1,5 @@
-﻿using Microsoft.WindowsAPICodePack.Dialogs;
+﻿using Microsoft.Win32;
+using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using UEcastocLib;
+using OpenFileDialog = System.Windows.Forms.OpenFileDialog;
+using SaveFileDialog = System.Windows.Forms.SaveFileDialog;
 
 namespace UnrealUnZen
 {
@@ -29,6 +32,7 @@ namespace UnrealUnZen
             UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
             UCasDataParser.FinishedUnpacking += workInProgressForm.OnFinishedUnpacking;
 
+            Packer.ManifestFileProcessed += workInProgressForm.OnManifestFileProcessed;
             Packer.FilePacked += workInProgressForm.OnFilePacked;
             Packer.FinishedPacking += workInProgressForm.OnFinishedPacking;
 
@@ -107,25 +111,19 @@ namespace UnrealUnZen
             saveFileDialog.Filter = "utoc file|*.utoc";
 
             if (repackFolderDialog.ShowDialog() != CommonFileDialogResult.Ok) return;
+
+            saveFileDialog.InitialDirectory = Directory.GetParent(repackFolderDialog.FileName)?.ToString();
+            saveFileDialog.FileName = Path.GetFileNameWithoutExtension(repackFolderDialog.FileName);
+
             if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
 
-            var repackMethod = RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem);
+            var compressionMethod = RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem);
+            var repackFolder = repackFolderDialog.FileName;
+            var outFile = saveFileDialog.FileName;
+            var aesKeyText = AESKey.Text;
 
             Task.Factory.StartNew(() => {
-                Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFileAddress, ".ucas"));
-
-                foreach (var file in manifest.Files.ToList())
-                {
-                    bool fileExists = File.Exists(Path.Combine(repackFolderDialog.FileName, file.Filepath.Replace("/", "\\")));
-                    bool isADependency = file.Filepath == "dependencies";
-
-                    if (fileExists || isADependency) continue;
-
-                    manifest.Files.Remove(file);
-                    manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(file.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
-                }
-
-                Packer.PackGameFiles(repackFolderDialog.FileName, manifest, saveFileDialog.FileName, repackMethod, AESKey.Text);
+                Packer.PackGameFiles(UTocFileAddress, UTocFile, repackFolder, outFile, compressionMethod, aesKeyText);
             });
 
             workInProgressForm.ShowDialog();

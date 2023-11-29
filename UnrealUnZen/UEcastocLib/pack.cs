@@ -6,12 +6,13 @@ using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Text;
 using UnrealUnZen;
+using File = System.IO.File;
 
 namespace UEcastocLib
 {
     public static class Packer
     {
-        public class FilePackedEventArguments
+        public class FileProcessedEventArguments
         {
             public string CurrentFilePath;
             public int CurrentFileNumber;
@@ -20,12 +21,17 @@ namespace UEcastocLib
             public ulong AllFilesSize;
         }
 
-        public delegate void FilePackedDelegate(FilePackedEventArguments filePackedEventArguments);
+        public delegate void FilePackedDelegate(FileProcessedEventArguments fileProcessedEventArguments);
         public delegate void FinishedPackingDelegate(int filesPacked);
-
 
         public static event FilePackedDelegate FilePacked;
         public static event FinishedPackingDelegate FinishedPacking;
+
+        public delegate void ManifestFileProcessedDelegate(FileProcessedEventArguments fileProcessedEventArguments);
+
+        public static event ManifestFileProcessedDelegate ManifestFileProcessed;
+
+
 
         const int CompSize = 0x10000;
         public static int PackUtocVersion = 3;
@@ -38,9 +44,39 @@ namespace UEcastocLib
             return Newtonsoft.Json.JsonConvert.DeserializeObject<Manifest>(json);
 
         }
-        public static int PackGameFiles(string dirPath, Manifest manifest, string outFile, string compressionMethod, string AESKey)
+
+        public static void PackGameFiles(string UTocFilePath, UTocData UTocFile, string repackFolderPath, string outFile,
+            string compressionMethod, string AESKey)
         {
-            dirPath = Path.GetFullPath(dirPath);
+            Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFilePath, ".ucas"));
+            FixManifest(manifest, repackFolderPath);
+            PackGameFiles(repackFolderPath, manifest, outFile, compressionMethod, AESKey);
+        }
+
+        private static void FixManifest(Manifest manifest, string repackFolderPath)
+        {
+            var TempManifestFiles = manifest.Files.ToList();
+            foreach (var (manifestFile, currentIndex) in TempManifestFiles.Select((manifestFile, currentIndex) => (manifestFile, currentIndex)))
+            {
+                bool fileExists = File.Exists(Path.Combine(repackFolderPath, manifestFile.Filepath.Replace("/", "\\")));
+                bool isADependency = manifestFile.Filepath == "dependencies";
+
+                if (fileExists || isADependency) continue;
+
+                manifest.Files.Remove(manifestFile);
+                manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(manifestFile.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
+
+                ManifestFileProcessed?.Invoke(new FileProcessedEventArguments
+                {
+                    CurrentFilePath = manifestFile.Filepath,
+                    CurrentFileNumber = currentIndex,
+                    TotalFilesNumber = TempManifestFiles.Count
+                });
+            }
+        }
+        public static int PackGameFiles(string repackFolderPath, Manifest manifest, string outFile, string compressionMethod, string AESKey)
+        {
+            repackFolderPath = Path.GetFullPath(repackFolderPath);
             outFile = Path.ChangeExtension(outFile, null); // Remove any extension
 
             string compression = "None";
@@ -61,7 +97,7 @@ namespace UEcastocLib
                 throw new Exception("Manifest read is null");
             }
 
-            int numberOfFilesPacked = PackToCasToc(dirPath, manifest, outFile, compression, aes);
+            int numberOfFilesPacked = PackToCasToc(repackFolderPath, manifest, outFile, compression, aes);
 
             // Write the embedded .pak file
             byte[] embedded = ToolResources.Packed_P;
@@ -129,7 +165,7 @@ namespace UEcastocLib
             }
 
             var allFilesSize = UCasDataParser.GetAllFilesSize(files);
-
+            ulong filesPackedSize = 0;
             Directory.CreateDirectory(Path.GetDirectoryName(outFilename));
             using (var ucasFile = File.Create(outFilename + ".ucas"))
             {
@@ -199,11 +235,13 @@ namespace UEcastocLib
                         ucasFile.Write(compressedChunk, 0, compressedChunk.Length);
                     }
 
-                    FilePacked?.Invoke(new FilePackedEventArguments {
+                    filesPackedSize += currentFileMetaData.OffLen.GetLength();
+
+                    FilePacked?.Invoke(new FileProcessedEventArguments {
                         CurrentFilePath = currentFileMetaData.FilePath,
                         CurrentFileNumber = i,
                         TotalFilesNumber = files.Count,
-                        FilesUnpackedSize = currentFileMetaData.OffLen.GetLength(),
+                        FilesUnpackedSize = filesPackedSize,
                         AllFilesSize = allFilesSize
                     });
                 }
