@@ -12,14 +12,16 @@ namespace UEcastocLib
             public string CurrentFilePath;
             public int CurrentFileNumber;
             public int TotalFilesNumber;
+            public ulong FilesUnpackedSize;
+            public ulong AllFilesSize;
         }
 
         public delegate void FileUnpackedDelegate(FileUnpackedEventArguments fileUnpackedEventArguments);
-        public delegate void FinishedUnpackingDelegate();
+        public delegate void FinishedUnpackingDelegate(int filesUnpacked);
 
 
-        public static FileUnpackedDelegate FileUnpacked;
-        public static FinishedUnpackingDelegate FinishedUnpacking;
+        public static event FileUnpackedDelegate FileUnpacked;
+        public static event FinishedUnpackingDelegate FinishedUnpacking;
 
         private static void UnpackFile(UTocData utoc, GameFileMetaData fdata, List<byte[]> blockData, string outDir)
         {
@@ -96,11 +98,14 @@ namespace UEcastocLib
         {
             outDir += utoc.MountPoint;
             int filesUnpacked = 0;
+            ulong filesUnpackedSize = 0;
+            ulong allFilesSizeTotal = 0;
 
             using (FileStream openUcas = File.OpenRead(ucasPath))
             {
                 List<GameFileMetaData> filesToUnpack = MatchFilter(utoc, filter);
 
+                allFilesSizeTotal = GetAllFilesSize(filesToUnpack);
                 foreach (var currentFileToUnpack in filesToUnpack)
                 {
                     List<byte[]> compressionBlockData = new List<byte[]>();
@@ -129,10 +134,33 @@ namespace UEcastocLib
 
                     UnpackFile(utoc, currentFileToUnpack, compressionBlockData, outDir);
                     filesUnpacked++;
+                    filesUnpackedSize += currentFileToUnpack.OffLen.GetLength();
+
+                    FileUnpacked?.Invoke(new FileUnpackedEventArguments
+                    {
+                        CurrentFilePath = currentFileToUnpack.FilePath,
+                        CurrentFileNumber = filesUnpacked,
+                        TotalFilesNumber = filesToUnpack.Count,
+                        FilesUnpackedSize = filesUnpackedSize,
+                        AllFilesSize = allFilesSizeTotal
+                    });
                 }
             }
 
+            FinishedUnpacking?.Invoke(filesUnpacked);
+
             return filesUnpacked;
+        }
+
+        private static ulong GetAllFilesSize(List<GameFileMetaData> files)
+        {
+            ulong allFilesSize = 0;
+            foreach(var FileMetaData in files)
+            {
+                allFilesSize += FileMetaData.OffLen.GetLength();
+            }
+
+            return allFilesSize;
         }
     }
 }
