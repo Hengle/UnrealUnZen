@@ -49,15 +49,15 @@ namespace UEcastocLib
             }
         }
 
-        private const int Gigabyte = 2 ^ 30;
+        private const int Gigabyte = 1073741824;
 
-        public static void EncryptFileWithAES(string filePath, byte[] aesKey, int NumberOfBytesToWorkOnAtATime = Gigabyte)
+        public static void EncryptFileWithAES(string filePath, byte[] aesKey, int numberOfBytesToWorkOnAtATime = Gigabyte)
         {
             using (FileStream streamIn = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
             {
                 using (FileStream streamOut = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
                 {
-                    EncryptWithAES(streamIn, streamOut, aesKey);
+                    EncryptWithAES(streamIn, streamOut, aesKey, numberOfBytesToWorkOnAtATime);
                 }
             }
         }
