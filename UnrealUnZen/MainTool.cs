@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml.Linq;
 using UEcastocLib;
 
 namespace UnrealUnZen
@@ -16,6 +17,7 @@ namespace UnrealUnZen
     public partial class MainTool : Form
     {
         private CommonOpenFileDialog UnpackFolderBrowserDialog = new CommonOpenFileDialog();
+        WorkInProgressForm workInProgressForm = new WorkInProgressForm();
 
         public MainTool()
         {
@@ -23,6 +25,13 @@ namespace UnrealUnZen
             UnpackFolderBrowserDialog.Title = 
                 "Select a folder into which to unpack the package files.\n" +
                 "Another folder with the name of the selected package will be created automatically.";
+
+            UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
+            UCasDataParser.FinishedUnpacking += workInProgressForm.OnFinishedUnpacking;
+
+            Packer.FilePacked += workInProgressForm.OnFilePacked;
+            Packer.FinishedPacking += workInProgressForm.OnFinishedPacking;
+
             InitializeComponent();
         }
 
@@ -83,10 +92,6 @@ namespace UnrealUnZen
             var unpackDirectoryPath = Path.Combine(UnpackFolderBrowserDialog.FileName, outFolderName);
             Directory.CreateDirectory(unpackDirectoryPath);
 
-            WorkInProgressForm workInProgressForm = new WorkInProgressForm();
-            UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
-            UCasDataParser.FinishedUnpacking += workInProgressForm.OnUnpackingFinished;
-
             Task.Factory.StartNew(() => UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
                 unpackDirectoryPath, RegexUnpack.Text));
 
@@ -104,23 +109,26 @@ namespace UnrealUnZen
             if (repackFolderDialog.ShowDialog() != CommonFileDialogResult.Ok) return;
             if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
 
-            Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFileAddress, ".ucas"));
+            var repackMethod = RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem);
 
-            foreach (var file in manifest.Files)
-            {
-                bool fileExists = File.Exists(Path.Combine(repackFolderDialog.FileName, file.Filepath.Replace("/", "\\")));
-                bool isDependencies = file.Filepath == "dependencies";
+            Task.Factory.StartNew(() => {
+                Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFileAddress, ".ucas"));
 
-                if (fileExists || isDependencies) continue;
+                foreach (var file in manifest.Files.ToList())
+                {
+                    bool fileExists = File.Exists(Path.Combine(repackFolderDialog.FileName, file.Filepath.Replace("/", "\\")));
+                    bool isADependency = file.Filepath == "dependencies";
 
-                manifest.Files.Remove(file);
-                manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(file.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
-            }
+                    if (fileExists || isADependency) continue;
 
-            int gameFilesPackedTotal = Packer.PackGameFiles(repackFolderDialog.FileName, manifest, saveFileDialog.FileName, RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem), AESKey.Text);
-            
-            MessageBox.Show(gameFilesPackedTotal + " file(s) packed!");
-            
+                    manifest.Files.Remove(file);
+                    manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(file.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
+                }
+
+                Packer.PackGameFiles(repackFolderDialog.FileName, manifest, saveFileDialog.FileName, repackMethod, AESKey.Text);
+            });
+
+            workInProgressForm.ShowDialog();
         }
 
         private void MountPointTXB_TextChanged(object sender, EventArgs e)
@@ -177,9 +185,7 @@ namespace UnrealUnZen
 
                 int gameFilesPackedTotal = Packer.PackGameFiles(dialog.FileName, manifest, saveFileDialog.FileName, RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem), AESKey.Text);
                 if (gameFilesPackedTotal != 0)
-                {
                     MessageBox.Show(gameFilesPackedTotal + " file(s) packed!");
-                }
             }
         }
 

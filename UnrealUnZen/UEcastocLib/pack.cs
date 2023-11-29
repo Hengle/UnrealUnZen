@@ -11,6 +11,22 @@ namespace UEcastocLib
 {
     public static class Packer
     {
+        public class FilePackedEventArguments
+        {
+            public string CurrentFilePath;
+            public int CurrentFileNumber;
+            public int TotalFilesNumber;
+            public ulong FilesUnpackedSize;
+            public ulong AllFilesSize;
+        }
+
+        public delegate void FilePackedDelegate(FilePackedEventArguments filePackedEventArguments);
+        public delegate void FinishedPackingDelegate(int filesPacked);
+
+
+        public static event FilePackedDelegate FilePacked;
+        public static event FinishedPackingDelegate FinishedPacking;
+
         const int CompSize = 0x10000;
         public static int PackUtocVersion = 3;
         const int CompressionNameLength = 32;
@@ -54,6 +70,8 @@ namespace UEcastocLib
                 fileStream.Write(embedded, 0, embedded.Length);
             }
 
+            FinishedPacking?.Invoke(numberOfFilesPacked);
+
             return numberOfFilesPacked;
         }
 
@@ -95,11 +113,7 @@ namespace UEcastocLib
                 foreach (var file in files)
                 {
                     if (m.Deps.ChunkIDToDependencies.ContainsKey(file.ChunkID.ID) && !subsetDependencies.ContainsKey(file.ChunkID.ID))
-                    {
                         subsetDependencies.Add(file.ChunkID.ID, m.Deps.ChunkIDToDependencies[file.ChunkID.ID]);
-
-                    }
-
                 }
             }
 
@@ -114,46 +128,49 @@ namespace UEcastocLib
                 throw new Exception("Could not find " + compression + " method. Please use none, oodle or zlib");
             }
 
+            var allFilesSize = UCasDataParser.GetAllFilesSize(files);
+
             Directory.CreateDirectory(Path.GetDirectoryName(outFilename));
-            using (var f = File.Create(outFilename + ".ucas"))
+            using (var ucasFile = File.Create(outFilename + ".ucas"))
             {
                 for (int i = 0; i < files.Count; i++)
                 {
+                    var currentFileMetaData = files[i];
                     MemoryMappedFile MemoryMappedFile;
                     long SizeOfmmf;
-                    string pathToread = Path.Combine(dir.Replace("/", "\\"), files[i].FilePath.Replace("/", "\\"));
+                    string pathToread = Path.Combine(dir.Replace("/", "\\"), currentFileMetaData.FilePath.Replace("/", "\\"));
                     if (!File.Exists(pathToread))
                     {
-                        if (files[i].FilePath != Constants.DepFileName) throw new Exception("File doesn't exist, and also its not the dependency file.");
+                        if (currentFileMetaData.FilePath != Constants.DepFileName) throw new Exception("File doesn't exist, and also its not the dependency file.");
                         byte[] ManifestCreatedFile = m.Deps.DeparseDependencies();
-                        MemoryMappedFile = Helpers.CreateMemoryMappedFileFromByteArray(ManifestCreatedFile, files[i].FilePath);
+                        MemoryMappedFile = Helpers.CreateMemoryMappedFileFromByteArray(ManifestCreatedFile, currentFileMetaData.FilePath);
                         SizeOfmmf = ManifestCreatedFile.LongLength;
-                        files[i].FilePath = "";
-                        files[i].ChunkID = FIoChunkID.FromHexString(depHexString);
-                        files[i].ChunkID.ID = Helpers.RandomUlong();
+                        currentFileMetaData.FilePath = "";
+                        currentFileMetaData.ChunkID = FIoChunkID.FromHexString(depHexString);
+                        currentFileMetaData.ChunkID.ID = Helpers.RandomUlong();
                     }
                     else
                     {
                         MemoryMappedFile = MemoryMappedFile.CreateFromFile(pathToread, FileMode.Open);
                         SizeOfmmf = new FileInfo(pathToread).Length;
                     }
-                    
 
-                    files[i].OffLen.SetLength((ulong)SizeOfmmf);
+
+                    currentFileMetaData.OffLen.SetLength((ulong)SizeOfmmf);
 
                     if (i == 0)
                     {
-                        files[i].OffLen.SetOffset(0);
+                        currentFileMetaData.OffLen.SetOffset(0);
                     }
                     else
                     {
                         var off = files[i - 1].OffLen.GetOffset() + files[i - 1].OffLen.GetLength();
                         off = ((off + CompSize - 1) / CompSize) * CompSize;
-                        files[i].OffLen.SetOffset(off);
+                        currentFileMetaData.OffLen.SetOffset(off);
                     }
 
-                    files[i].Metadata.ChunkHash = new FIoChunkHash(Helpers.SHA1Hash(MemoryMappedFile));
-                    files[i].Metadata.Flags = FIoStoreTocEntryMetaFlags.CompressedMetaFlag;
+                    currentFileMetaData.Metadata.ChunkHash = new FIoChunkHash(Helpers.SHA1Hash(MemoryMappedFile));
+                    currentFileMetaData.Metadata.Flags = FIoStoreTocEntryMetaFlags.CompressedMetaFlag;
 
                     long PosOfReaded = 0;
                     long RemainSize = SizeOfmmf;
@@ -172,15 +189,23 @@ namespace UEcastocLib
                         var compressedChunk = cChunkPtr.ToArray();
 
                         block.CompressionMethod = compMethodNumber;
-                        block.SetOffset((ulong)f.Position);
+                        block.SetOffset((ulong)ucasFile.Position);
                         block.SetUncompressedSize((uint)chunkLen);
                         block.SetCompressedSize((uint)compressedChunk.Length);
 
                         compressedChunk = compressedChunk.Concat(Helpers.GetRandomBytes((0x10 - (compressedChunk.Length % 0x10)) & (0x10 - 1))).ToArray();
-                        files[i].CompressionBlocks.Add(block);
+                        currentFileMetaData.CompressionBlocks.Add(block);
 
-                        f.Write(compressedChunk, 0, compressedChunk.Length);
+                        ucasFile.Write(compressedChunk, 0, compressedChunk.Length);
                     }
+
+                    FilePacked?.Invoke(new FilePackedEventArguments {
+                        CurrentFilePath = currentFileMetaData.FilePath,
+                        CurrentFileNumber = i,
+                        TotalFilesNumber = files.Count,
+                        FilesUnpackedSize = currentFileMetaData.OffLen.GetLength(),
+                        AllFilesSize = allFilesSize
+                    });
                 }
             }
         }
@@ -392,28 +417,28 @@ namespace UEcastocLib
             }
         }
 
-        public static int PackToCasToc(string dir, Manifest m, string outFilename, string compression, byte[] aes)
+        public static int PackToCasToc(string directory, Manifest manifest, string outFilename, string compression, byte[] aes)
         {
             var gameFileMetaDatas = new List<GameFileMetaData>();
             GameFileMetaData newEntry;
 
-            foreach (var v in m.Files)
+            foreach (var file in manifest.Files)
             {
                 var offlen = new FIoOffsetAndLength();
-                var p = Path.Combine(dir, v.Filepath);
+                var p = Path.Combine(directory, file.Filepath);
                 if (File.Exists(p))
                 {
                     offlen.SetLength((ulong)new FileInfo(p).Length);
                 }
-                else if (v.Filepath == Constants.DepFileName)
+                else if (file.Filepath == Constants.DepFileName)
                 {
                     offlen.SetLength(0); // Will be fixed in a later function
                 }
 
                 newEntry = new GameFileMetaData
                 {
-                    FilePath = v.Filepath,
-                    ChunkID = FIoChunkID.FromHexString(v.ChunkID),
+                    FilePath = file.Filepath,
+                    ChunkID = FIoChunkID.FromHexString(file.ChunkID),
                     OffLen = offlen,
                     Metadata = new FIoStoreTocEntryMeta(),
                     CompressionBlocks = new List<FIoStoreTocCompressedBlockEntry>()
@@ -423,12 +448,12 @@ namespace UEcastocLib
             }
             //var files = ListFilesInDir(dir, m.Files.ToDictionary(k => k.Filepath, v => FIoChunkID.FromHexString(v.ChunkID)));
 
-            gameFileMetaDatas.PackFilesToUcas(m, dir, outFilename, compression);
+            gameFileMetaDatas.PackFilesToUcas(manifest, directory, outFilename, compression);
 
             if (aes.Length != 0)
                 Helpers.EncryptFileWithAES(outFilename + ".ucas", aes);
 
-            var utocBytes = gameFileMetaDatas.ConstructUtocFile(compression, aes);
+            byte[] utocBytes = gameFileMetaDatas.ConstructUtocFile(compression, aes);
             File.WriteAllBytes(outFilename + ".utoc", utocBytes);
 
             int gameFilesPackedTotal = gameFileMetaDatas.Count;

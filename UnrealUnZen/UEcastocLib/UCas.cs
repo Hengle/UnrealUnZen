@@ -152,10 +152,10 @@ namespace UEcastocLib
             return filesUnpacked;
         }
 
-        private static ulong GetAllFilesSize(List<GameFileMetaData> files)
+        public static ulong GetAllFilesSize(List<GameFileMetaData> files)
         {
             ulong allFilesSize = 0;
-            foreach(var FileMetaData in files)
+            foreach (var FileMetaData in files)
             {
                 allFilesSize += FileMetaData.OffLen.GetLength();
             }

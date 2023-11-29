@@ -8,6 +8,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using UEcastocLib;
+using static UEcastocLib.Packer;
+using static UEcastocLib.UCasDataParser;
 
 namespace UnrealUnZen
 {
@@ -36,9 +38,33 @@ namespace UnrealUnZen
             });
         }
 
-        public void OnUnpackingFinished(int filesUnpacked)
+        public void OnFinishedUnpacking(int filesUnpacked)
         {
             MessageBox.Show(filesUnpacked + " file(s) extracted!");
+            Invoke((MethodInvoker)Close);
+        }
+
+        public void OnFilePacked(FilePackedEventArguments filePackedEventArguments)
+        {
+            Invoke((MethodInvoker)delegate
+            {
+                ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
+                var currentFileNumber = filePackedEventArguments.CurrentFileNumber;
+                var totalFilesNumber = filePackedEventArguments.TotalFilesNumber;
+                var filesUnpackedSize = filePackedEventArguments.FilesUnpackedSize;
+                var allFilesSize = filePackedEventArguments.AllFilesSize;
+                double filesUnpackedSizeGB = (double)filesUnpackedSize / Gigabyte;
+                double allFilesSizeGB = (double)allFilesSize / Gigabyte;
+
+                ProgressLabel.Text =
+                    $"Unpacked {currentFileNumber} out of {totalFilesNumber} files\n" +
+                    $"{filesUnpackedSizeGB:0.##} / {allFilesSizeGB:0.##} GB";
+            });
+        }
+
+        public void OnFinishedPacking(int filesPacked)
+        {
+            MessageBox.Show(filesPacked + " file(s) extracted!");
             Invoke((MethodInvoker)Close);
         }
     }
