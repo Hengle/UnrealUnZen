@@ -76,54 +76,53 @@ namespace UnrealUnZen
         private void UnpackBTN_Click(object sender, EventArgs e)
         {
             UnpackFolderBrowserDialog.InitialDirectory = UTocFileAddress;
-            if (UnpackFolderBrowserDialog.ShowDialog() == CommonFileDialogResult.Ok)
-            {
-                Task.Factory.StartNew(UnpackFilesTask);
 
-                WorkInProgressForm workInProgressForm = new WorkInProgressForm();
+            if (UnpackFolderBrowserDialog.ShowDialog() != CommonFileDialogResult.Ok) return;
 
-                UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
-                UCasDataParser.FinishedUnpacking += workInProgressForm.OnUnpackingFinished;
+            var outFolderName = Path.GetFileNameWithoutExtension(UTocFileAddress) + "_Export";
+            var unpackDirectoryPath = Path.Combine(UnpackFolderBrowserDialog.FileName, outFolderName);
+            Directory.CreateDirectory(unpackDirectoryPath);
 
-                workInProgressForm.ShowDialog();
-            }
-        }
+            WorkInProgressForm workInProgressForm = new WorkInProgressForm();
+            UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
+            UCasDataParser.FinishedUnpacking += workInProgressForm.OnUnpackingFinished;
 
-        private void UnpackFilesTask()
-        {
-            var OutFolderName = Path.GetFileNameWithoutExtension(UTocFileAddress) + "_Export";
-            var UnpackDirectoryPath = Path.Combine(UnpackFolderBrowserDialog.FileName, OutFolderName);
-            Directory.CreateDirectory(UnpackDirectoryPath);
+            Task.Factory.StartNew(() => UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
+                unpackDirectoryPath, RegexUnpack.Text));
 
-            int exportcount = UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
-                UnpackDirectoryPath, RegexUnpack.Text);
+            workInProgressForm.ShowDialog();
         }
 
         private void RepackBTN_Click(object sender, EventArgs e)
         {
-            CommonOpenFileDialog dialog = new CommonOpenFileDialog();
-            dialog.IsFolderPicker = true;
+            CommonOpenFileDialog repackFolderDialog = new CommonOpenFileDialog();
+            repackFolderDialog.IsFolderPicker = true;
+
             SaveFileDialog saveFileDialog = new SaveFileDialog();
             saveFileDialog.Filter = "utoc file|*.utoc";
-            if (dialog.ShowDialog() == CommonFileDialogResult.Ok && saveFileDialog.ShowDialog() == DialogResult.OK)
+
+            if (repackFolderDialog.ShowDialog() != CommonFileDialogResult.Ok) return;
+            if (saveFileDialog.ShowDialog() != DialogResult.OK) return;
+
+            Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFileAddress, ".ucas"));
+
+            foreach (var file in manifest.Files)
             {
-                Manifest manifest = UTocFile.ConstructManifest(Path.ChangeExtension(UTocFileAddress, ".ucas"));
-                foreach (var f in manifest.Files.ToList())
-                {
-                    if (!File.Exists(Path.Combine(dialog.FileName, f.Filepath.Replace("/", "\\"))) && f.Filepath != "dependencies")
-                    {
-                        manifest.Files.Remove(f);
-                        manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(f.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
-                    }
-                }
-                //File.WriteAllText("debg.json", JsonConvert.SerializeObject(manifest, Formatting.Indented));
-                int gameFilesPackedTotal = Packer.PackGameFiles(dialog.FileName, manifest, saveFileDialog.FileName, RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem), AESKey.Text);
-                if (gameFilesPackedTotal != 0)
-                {
-                    MessageBox.Show(gameFilesPackedTotal + " file(s) packed!");
-                }
+                bool fileExists = File.Exists(Path.Combine(repackFolderDialog.FileName, file.Filepath.Replace("/", "\\")));
+                bool isDependencies = file.Filepath == "dependencies";
+
+                if (fileExists || isDependencies) continue;
+
+                manifest.Files.Remove(file);
+                manifest.Deps.ChunkIDToDependencies.Remove(ulong.Parse(file.ChunkID.Substring(0, 16), System.Globalization.NumberStyles.HexNumber));
             }
+
+            int gameFilesPackedTotal = Packer.PackGameFiles(repackFolderDialog.FileName, manifest, saveFileDialog.FileName, RepackMethodCMB.GetItemText(RepackMethodCMB.SelectedItem), AESKey.Text);
+            
+            MessageBox.Show(gameFilesPackedTotal + " file(s) packed!");
+            
         }
+
         private void MountPointTXB_TextChanged(object sender, EventArgs e)
         {
             Constants.MountPoint = MountPointTXB.Text;
