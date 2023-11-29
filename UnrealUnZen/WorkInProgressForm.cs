@@ -20,6 +20,7 @@ namespace UnrealUnZen
             InitializeComponent();
         }
 
+        private const ulong Gigabyte = 1073741824;
         public void OnFileUnpacked(FileUnpackedEventArguments fileUnpackedEventArguments)
         {
             Invoke((MethodInvoker)delegate
@@ -48,7 +49,6 @@ namespace UnrealUnZen
         {
             Invoke((MethodInvoker)delegate
             {
-                ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
                 var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
                 var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
                 var filesUnpackedSize = fileProcessedEventArguments.FilesUnpackedSize;
@@ -65,7 +65,6 @@ namespace UnrealUnZen
         {
             Invoke((MethodInvoker)delegate
             {
-                ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
                 var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
                 var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
                 var filesUnpackedSize = fileProcessedEventArguments.FilesUnpackedSize;
@@ -83,6 +82,20 @@ namespace UnrealUnZen
         {
             MessageBox.Show(filesPacked + " file(s) extracted!");
             Invoke((MethodInvoker)Close);
+        }
+
+        public void OnPakWritten(long bytesWrittenTotal, long pakBytesTotal)
+        {
+            Invoke((MethodInvoker)delegate
+            {
+                double bytesWrittenTotalGB = (double)bytesWrittenTotal / Gigabyte;
+                double pakBytesTotalGB = (double)pakBytesTotal / Gigabyte;
+
+                ProgressLabel.Text =
+                    $"Saving .pak file\n" +
+                    $"{bytesWrittenTotalGB:0.##} / {pakBytesTotalGB:0.##} GB";
+            });
+            
         }
     }
 }

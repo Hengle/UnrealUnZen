@@ -35,6 +35,7 @@ namespace UnrealUnZen
             Packer.ManifestFileProcessed += workInProgressForm.OnManifestFileProcessed;
             Packer.FilePacked += workInProgressForm.OnFilePacked;
             Packer.FinishedPacking += workInProgressForm.OnFinishedPacking;
+            Packer.PakWritten += workInProgressForm.OnPakWritten;
 
             InitializeComponent();
         }

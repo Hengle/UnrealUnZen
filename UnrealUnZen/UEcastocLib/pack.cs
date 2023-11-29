@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.MemoryMappedFiles;
+using System.IO.Packaging;
 using System.Linq;
 using System.Text;
 using UnrealUnZen;
@@ -31,6 +32,9 @@ namespace UEcastocLib
 
         public static event ManifestFileProcessedDelegate ManifestFileProcessed;
 
+        public delegate void PakWrittenDelegate(long bytesWrittenTotal, long pakBytesTotal);
+
+        public static event PakWrittenDelegate PakWritten;
 
 
         const int CompSize = 0x10000;
@@ -91,6 +95,7 @@ namespace UEcastocLib
                 throw new Exception("AES key length should be 32 bytes or none at all");
             }
 
+            // TODO Catch the manifest in the calling code to gracefully handle the exception
             //Manifest manifest = ReadManifest(manifestPath);
             if (manifest == null)
             {
@@ -99,16 +104,35 @@ namespace UEcastocLib
 
             int numberOfFilesPacked = PackToCasToc(repackFolderPath, manifest, outFile, compression, aes);
 
-            // Write the embedded .pak file
-            byte[] embedded = ToolResources.Packed_P;
-            using (FileStream fileStream = File.Open(outFile + ".pak", FileMode.OpenOrCreate))
-            {
-                fileStream.Write(embedded, 0, embedded.Length);
-            }
+            WriteEmbeddedPakFile(outFile);
 
             FinishedPacking?.Invoke(numberOfFilesPacked);
 
             return numberOfFilesPacked;
+        }
+
+        private static void WriteEmbeddedPakFile(string outFileName)
+        {
+            const int Megabyte = 1048576;
+
+            string outFileFullName = outFileName + ".pak";
+            byte[] embedded = ToolResources.Packed_P;
+            MemoryStream packedEmbeddedPakStream = new MemoryStream(embedded);
+
+            using (FileStream fileStream = File.Open(outFileFullName, FileMode.OpenOrCreate))
+            {
+                while (true)
+                {
+                    byte[] readingBytesBuffer = new byte[Megabyte];
+                    int totalNumberOfBytesRead = packedEmbeddedPakStream.Read(readingBytesBuffer, 0, readingBytesBuffer.Length);
+
+                    if (totalNumberOfBytesRead == 0) break;
+
+                    fileStream.Write(readingBytesBuffer, 0, totalNumberOfBytesRead);
+
+                    PakWritten?.Invoke(packedEmbeddedPakStream.Position + 1, packedEmbeddedPakStream.Length);
+                }
+            }
         }
 
         public static List<GameFileMetaData> ListFilesInDir(string dir, Dictionary<string, FIoChunkID> pathToChunkID)
