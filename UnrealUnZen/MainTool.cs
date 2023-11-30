@@ -2,6 +2,7 @@
 using Microsoft.WindowsAPICodePack.Dialogs;
 using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -49,21 +50,31 @@ namespace UnrealUnZen
             RepackMethodCMB.SelectedIndex = 0;
             UTocVerCMB.SelectedIndex = 0;
         }
-        public static TreeNode MakeTreeFromPaths(List<string> paths, string rootNodeName = "", char separator = '/')
+        public TreeNode MakeTreeFromPaths(List<string> filePaths, string rootNodeName = "", char separator = '/')
         {
-            var rootNode = new TreeNode(rootNodeName);
-            foreach (var path in paths.Where(x => !string.IsNullOrEmpty(x.Trim())))
+            TreeNode rootNode = new TreeNode(rootNodeName);
+            List<string> nonEmptyPaths = filePaths.Where(x => !string.IsNullOrEmpty(x.Trim())).ToList();
+            int numberOfFilesProcessed = 0;
+            foreach (var path in nonEmptyPaths)
             {
                 var currentNode = rootNode;
                 var pathItems = path.Split(separator);
                 foreach (var item in pathItems)
                 {
-                    var tmp = currentNode.Nodes.Cast<TreeNode>().Where(x => x.Text.Equals(item));
-                    currentNode = tmp.Count() > 0 ? tmp.Single() : currentNode.Nodes.Add(item);
+                    List<TreeNode> nodesWithSameTextAsItem = currentNode.Nodes.Cast<TreeNode>().Where(x => x.Text.Equals(item)).ToList();
+
+                    if (nodesWithSameTextAsItem.Any())
+                        currentNode = nodesWithSameTextAsItem.Single();
+                    else
+                        currentNode = currentNode.Nodes.Add(item);
                 }
+
+                numberOfFilesProcessed++;
+                workInProgressForm.OnMakeTreeFileProcessed(numberOfFilesProcessed, nonEmptyPaths.Count);
             }
             return rootNode;
         }
+
         private void OpenTocBTN_Click(object sender, EventArgs e)
         {
             OpenFileDialog ofd = new OpenFileDialog();
@@ -81,11 +92,12 @@ namespace UnrealUnZen
 
                 List<string> paths = UTocFile.Files.Select(archiveFile => archiveFile.FilePath).ToList();
 
-                workInProgressForm.OnParsingUtocStageEvent("Making UI tree from paths");
                 var tree = MakeTreeFromPaths(paths, Path.GetFileNameWithoutExtension(UTocFileAddress), '\\');
 
                 Invoke((MethodInvoker)delegate
                 {
+                    workInProgressForm.OnParsingUtocStageEvent("Updating the view with the file tree");
+                    Application.DoEvents();
                     ArchiveViewTV.Nodes.Clear();
                     ArchiveViewTV.Nodes.Add(tree);
 

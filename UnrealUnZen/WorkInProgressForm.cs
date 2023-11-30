@@ -133,5 +133,15 @@ namespace UnrealUnZen
                 ProgressLabel.Text = stageName;
             });
         }
+
+        public void OnMakeTreeFileProcessed(int currentFileNumber, int totalNumberOfFiles)
+        {
+            InvokeNonBlocking((MethodInvoker)delegate
+            {
+                ProgressLabel.Text =
+                    $"Creating file tree\n" +
+                    $"Processed {currentFileNumber} out of {totalNumberOfFiles} manifest files";
+            });
+        }
     }
 }
