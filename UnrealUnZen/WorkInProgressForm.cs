@@ -119,7 +119,19 @@ namespace UnrealUnZen
                     $"Saving .pak file\n" +
                     $"{bytesWrittenTotalGB:0.##} / {pakBytesTotalGB:0.##} GB";
             });
-            
+        }
+
+        public void OnFinishedParsingUtoc()
+        {
+            Invoke((MethodInvoker)Close);
+        }
+
+        public void OnParsingUtocStageEvent(string stageName)
+        {
+            Invoke((MethodInvoker) delegate
+            {
+                ProgressLabel.Text = stageName;
+            });
         }
     }
 }

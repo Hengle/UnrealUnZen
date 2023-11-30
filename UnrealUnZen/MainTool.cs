@@ -29,6 +29,7 @@ namespace UnrealUnZen
                 "Select a folder into which to unpack the package files.\n" +
                 "Another folder with the name of the selected package will be created automatically.";
 
+            UTocDataParser.ParsingUtocStageEvent += workInProgressForm.OnParsingUtocStageEvent;
             UCasDataParser.FileUnpacked += workInProgressForm.OnFileUnpacked;
             UCasDataParser.FinishedUnpacking += workInProgressForm.OnFinishedUnpacking;
 
@@ -67,25 +68,38 @@ namespace UnrealUnZen
         {
             OpenFileDialog ofd = new OpenFileDialog();
             ofd.Filter = "UToc files(*.utoc)|*.utoc";
-            if (ofd.ShowDialog() == DialogResult.OK)
+
+            if (ofd.ShowDialog() != DialogResult.OK) return;
+
+            UTocFileAddress = ofd.FileName;
+
+            
+
+            Task.Factory.StartNew(() =>
             {
-                UTocFileAddress = ofd.FileName;
                 UTocFile = UTocDataParser.ParseUtocFile(UTocFileAddress, Helpers.HexStringToByteArray(AESKey.Text));
-                List<string> pathes = new List<string>();
 
-                for (int i = 0; i < UTocFile.Files.Count; i++)
+                List<string> paths = UTocFile.Files.Select(archiveFile => archiveFile.FilePath).ToList();
+
+                workInProgressForm.OnParsingUtocStageEvent("Making UI tree from paths");
+                var tree = MakeTreeFromPaths(paths, Path.GetFileNameWithoutExtension(UTocFileAddress), '\\');
+
+                Invoke((MethodInvoker)delegate
                 {
-                    pathes.Add(UTocFile.Files[i].FilePath);
-                }
+                    ArchiveViewTV.Nodes.Clear();
+                    ArchiveViewTV.Nodes.Add(tree);
 
-                ArchiveViewTV.Nodes.Clear();
-                ArchiveViewTV.Nodes.Add(MakeTreeFromPaths(pathes, Path.GetFileNameWithoutExtension(UTocFileAddress), '\\'));
-                OpenTocBTN.Text = "Load TOC (Loaded " + Path.GetFileNameWithoutExtension(UTocFileAddress) + ")";
-                UnpackBTN.Enabled = true;
-                RepackBTN.Enabled = true;
-                saveManifestToolStripMenuItem.Enabled = true;
-                fixManifestToolStripMenuItem.Enabled = true;
-            }
+                    UnpackBTN.Enabled = true;
+                    RepackBTN.Enabled = true;
+                    saveManifestToolStripMenuItem.Enabled = true;
+                    fixManifestToolStripMenuItem.Enabled = true;
+                    OpenTocBTN.Text = "Load TOC (Loaded " + Path.GetFileNameWithoutExtension(UTocFileAddress) + ")";
+
+                    workInProgressForm.OnFinishedParsingUtoc();
+                });
+            });
+
+            workInProgressForm.ShowDialog();
         }
         private void UnpackBTN_Click(object sender, EventArgs e)
         {
