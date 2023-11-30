@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -15,15 +16,38 @@ namespace UnrealUnZen
 {
     public partial class WorkInProgressForm : Form
     {
+        private readonly List<IAsyncResult> UIBeginInvokeCalls = new List<IAsyncResult>();
+
         public WorkInProgressForm()
         {
             InitializeComponent();
         }
 
+        private void ProcessUIBeginInvokeCalls()
+        {
+            UIBeginInvokeCalls.RemoveAll(AsyncResult => AsyncResult.IsCompleted);
+        }
+
+        private bool IsEligibleToUpdateUIAgain()
+        {
+            return UIBeginInvokeCalls.Count == 0;
+        }
+
+        private void InvokeNonBlocking(Delegate method)
+        {
+            ProcessUIBeginInvokeCalls();
+
+            if (!IsEligibleToUpdateUIAgain()) return;
+
+            var asyncResult = BeginInvoke(method);
+
+            UIBeginInvokeCalls.Add(asyncResult);
+        }
+
         private const ulong Gigabyte = 1073741824;
         public void OnFileUnpacked(FileUnpackedEventArguments fileUnpackedEventArguments)
         {
-            Invoke((MethodInvoker)delegate
+            InvokeNonBlocking((MethodInvoker)delegate
             {
                 ulong Gigabyte = (ulong)Math.Pow(2.0, 30.0);
                 var currentFileNumber = fileUnpackedEventArguments.CurrentFileNumber;
@@ -47,7 +71,7 @@ namespace UnrealUnZen
 
         public void OnManifestFileProcessed(FileProcessedEventArguments fileProcessedEventArguments)
         {
-            Invoke((MethodInvoker)delegate
+            InvokeNonBlocking((MethodInvoker)delegate
             {
                 var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
                 var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
@@ -63,7 +87,7 @@ namespace UnrealUnZen
 
         public void OnFilePacked(FileProcessedEventArguments fileProcessedEventArguments)
         {
-            Invoke((MethodInvoker)delegate
+            InvokeNonBlocking((MethodInvoker)delegate
             {
                 var currentFileNumber = fileProcessedEventArguments.CurrentFileNumber;
                 var totalFilesNumber = fileProcessedEventArguments.TotalFilesNumber;
@@ -86,7 +110,7 @@ namespace UnrealUnZen
 
         public void OnPakWritten(long bytesWrittenTotal, long pakBytesTotal)
         {
-            Invoke((MethodInvoker)delegate
+            InvokeNonBlocking((MethodInvoker)delegate
             {
                 double bytesWrittenTotalGB = (double)bytesWrittenTotal / Gigabyte;
                 double pakBytesTotalGB = (double)pakBytesTotal / Gigabyte;
