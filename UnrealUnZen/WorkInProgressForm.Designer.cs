@@ -57,6 +57,6 @@
         }
 
         #endregion
-        private System.Windows.Forms.Label ProgressLabel;
+        public System.Windows.Forms.Label ProgressLabel;
     }
 }

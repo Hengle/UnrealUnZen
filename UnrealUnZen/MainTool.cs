@@ -25,6 +25,7 @@ namespace UnrealUnZen
 
         public MainTool()
         {
+            workInProgressForm.StartPosition = FormStartPosition.CenterParent;
             UnpackFolderBrowserDialog.IsFolderPicker = true;
             UnpackFolderBrowserDialog.Title = 
                 "Select a folder into which to unpack the package files.\n" +
@@ -111,7 +112,7 @@ namespace UnrealUnZen
                 });
             });
 
-            workInProgressForm.ShowDialog();
+            StartProgressReport();
         }
         private void UnpackBTN_Click(object sender, EventArgs e)
         {
@@ -126,7 +127,7 @@ namespace UnrealUnZen
             Task.Factory.StartNew(() => UTocFile.UnpackUcasFiles(Path.ChangeExtension(UTocFileAddress, ".ucas"),
                 unpackDirectoryPath, RegexUnpack.Text));
 
-            workInProgressForm.ShowDialog();
+            StartProgressReport();
         }
 
         private void RepackBTN_Click(object sender, EventArgs e)
@@ -153,7 +154,7 @@ namespace UnrealUnZen
                 Packer.PackGameFiles(UTocFileAddress, UTocFile, repackFolder, outFile, compressionMethod, aesKeyText);
             });
 
-            workInProgressForm.ShowDialog();
+            StartProgressReport();
         }
 
         private void MountPointTXB_TextChanged(object sender, EventArgs e)
@@ -217,6 +218,12 @@ namespace UnrealUnZen
         private void HelpFilter_Click(object sender, EventArgs e)
         {
             MessageBox.Show("this will filter the files to extract using the W wildcards separated by comma or semicolon, example {}.mp3,{}.txt;{}myname{}\r\nuse {} instead of * to avoid issues on Windows");
+        }
+
+        private void StartProgressReport()
+        {
+            workInProgressForm.ProgressLabel.Text = "";
+            workInProgressForm.ShowDialog();
         }
     }
 }

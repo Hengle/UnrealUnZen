@@ -97,7 +97,7 @@ namespace UnrealUnZen
                 double allFilesSizeGB = (double)allFilesSize / Gigabyte;
 
                 ProgressLabel.Text =
-                    $"Unpacked {currentFileNumber} out of {totalFilesNumber} files\n" +
+                    $"Packed {currentFileNumber} out of {totalFilesNumber} files\n" +
                     $"{filesUnpackedSizeGB:0.##} / {allFilesSizeGB:0.##} GB";
             });
         }
